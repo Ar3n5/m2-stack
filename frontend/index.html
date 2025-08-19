@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>AM Web Frontend</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; max-width: 680px; margin: 2rem auto; padding: 0 1rem; }
+    header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; }
+    .card { border:1px solid #ddd; border-radius:12px; padding:1rem; margin:1rem 0; }
+    input, button { font-size:1rem; padding:0.5rem; }
+    button { cursor:pointer; }
+    code { background:#f6f6f6; padding:0.2rem 0.4rem; border-radius:6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AM Web Frontend (Apache)</h1>
+    <small>Auto-refresh to see changes</small>
+  </header>
+
+  <div class="card">
+    <h2>Current name</h2>
+    <p id="name">Loading…</p>
+  </div>
+
+  <div class="card">
+    <h2>Update name</h2>
+    <form id="nameForm">
+      <input id="newName" placeholder="Enter new name" required />
+      <button type="submit">Save</button>
+    </form>
+    <p id="saveStatus"></p>
+  </div>
+
+  <div class="card">
+    <h2>Container info</h2>
+    <pre id="containerInfo">Loading…</pre>
+  </div>
+
+  <script>
+  // If we're on :8080 (Compose), talk to the API on :8000. Otherwise use relative /api (works in k8s).
+  const API_BASE = (location.port === "8080") ? "http://localhost:8000/api" : "/api";
+
+  async function fetchJSON(path, opts) {
+    const res = await fetch(API_BASE + path, opts);
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  async function load() {
+    try {
+      const data = await fetchJSON('/name');
+      document.getElementById('name').textContent = data.name;
+    } catch (e) {
+      document.getElementById('name').textContent = 'Error: ' + e.message;
+    }
+    try {
+      const info = await fetchJSON('/container');
+      document.getElementById('containerInfo').textContent = JSON.stringify(info, null, 2);
+    } catch (e) {
+      document.getElementById('containerInfo').textContent = 'Error: ' + e.message;
+    }
+  }
+
+  document.getElementById('nameForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('newName').value.trim();
+    if (!name) return;
+    const status = document.getElementById('saveStatus');
+    status.textContent = 'Saving…';
+    try {
+      await fetchJSON('/name', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      status.textContent = 'Saved! Refresh the page to see it.';
+    } catch (e) {
+      status.textContent = 'Error: ' + e.message;
+    }
+  });
+
+  load();
+</script>
+</body>
+</html>
