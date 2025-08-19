@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: m2
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: api }
+  template:
+    metadata:
+      labels: { app: api }
+    spec:
+      # 👇 Add this block
+      initContainers:
+        - name: init-db
+          image: postgres:16-alpine
+          env:
+            - { name: DB_HOST, value: postgres }
+            - { name: DB_PORT, value: "5432" }
+            - { name: DB_NAME, value: m2db }
+            - { name: DB_USER, value: m2user }
+            - { name: PGPASSWORD, value: m2pass }
+          command: ["sh","-c"]
+          args:
+            - >
+              until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER"; do
+                echo "waiting for postgres..."; sleep 1;
+              done;
+              psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1
+              -c "CREATE TABLE IF NOT EXISTS current_name (id INT PRIMARY KEY, name TEXT NOT NULL);"
+              -c "INSERT INTO current_name (id,name) VALUES (1,'Your Name') ON CONFLICT (id) DO NOTHING;"
+      containers:
+        - name: api
+          image: am-api:1.0
+          ports:
+            - containerPort: 8000
+          env:
+            - { name: DB_HOST, value: postgres }
+            - { name: DB_PORT, value: "5432" }
+            - { name: DB_NAME, value: m2db }
+            - { name: DB_USER, value: m2user }
+            - { name: DB_PASSWORD, value: m2pass }
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: m2
+spec:
+  selector: { app: api }
+  ports: [{ port: 8000, targetPort: 8000 }]
